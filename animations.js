@@ -324,7 +324,6 @@ document.addEventListener('DOMContentLoaded', () => {
       activeBox    = box;
       activeOrigin = { parent: box.parentNode, next: box.nextElementSibling };
       state.active = 'box';
-      lockScroll();
 
       const s = Flip.getState(box);
       box.classList.add('is-box--expanded');
@@ -388,13 +387,11 @@ document.addEventListener('DOMContentLoaded', () => {
         nested    : true,
         onComplete : () => {
           boxFlipTween = null;
-          unlockScroll();
           revealCardContent(box); // 3 — zoom card content back in
           onDone?.();
         },
         onInterrupt: () => {
           boxFlipTween = null;
-          unlockScroll();
           revealCardContent(box);
           onDone?.();
         }
