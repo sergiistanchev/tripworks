@@ -257,12 +257,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ── Expanded reveal content ───────────────────────────────────────────────────
 
+  const revealWrapper = box => box.querySelector('[data-gsap="reveal"]');
+
   function setRevealHidden(box) {
+    const wrapper = revealWrapper(box);
+    if (wrapper) gsap.set(wrapper, { autoAlpha: 0, y: 40 });
     gsap.set(reveals(box), { autoAlpha: 0, y: 40 });
   }
 
   function animateReveal(box) {
-    const items = reveals(box);
+    const wrapper = revealWrapper(box);
+    const items   = reveals(box);
+    if (!wrapper) return;
+    // unhide wrapper instantly, then stagger children
+    gsap.set(wrapper, { autoAlpha: 1, y: 0 });
     if (!items.length) return;
     boxRevealTL = gsap.to(items, {
       autoAlpha: 1, y: 0, duration: 0.55,
@@ -271,12 +279,21 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function hideReveal(box, onDone) {
-    const items = reveals(box);
-    if (!items.length) { onDone?.(); return; }
+    const wrapper = revealWrapper(box);
+    const items   = reveals(box);
+    if (!wrapper) { onDone?.(); return; }
+    if (!items.length) {
+      gsap.to(wrapper, {
+        autoAlpha: 0, y: 40, duration: 0.2, ease: 'power2.in',
+        onComplete: onDone, onInterrupt: onDone
+      });
+      return;
+    }
     gsap.to(items, {
       autoAlpha: 0, y: 40, duration: 0.2,
       ease: 'power2.in', stagger: 0, overwrite: 'auto',
-      onComplete: onDone, onInterrupt: onDone
+      onComplete:  () => { gsap.set(wrapper, { autoAlpha: 0, y: 40 }); onDone?.(); },
+      onInterrupt: () => { gsap.set(wrapper, { autoAlpha: 0, y: 40 }); onDone?.(); }
     });
   }
 
