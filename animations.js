@@ -383,16 +383,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ── Events ────────────────────────────────────────────────────────────────────
 
+  const isCloseBtn = el => el.closest('[data-gsap="close-btn"], [data-gsap="close-button"]');
+
   document.querySelectorAll('[data-gsap="box"]').forEach(box => {
     box.addEventListener('click', e => {
-      if (e.target.closest('[data-gsap="close-btn"]')) return;
+      if (isCloseBtn(e.target)) return;
       if (activeBox === box) return;
       closeActive(() => expandBox(box));
     });
   });
 
   document.addEventListener('click', e => {
-    if (e.target.closest('[data-gsap="close-btn"]')) collapseBox();
+    if (isCloseBtn(e.target)) collapseBox();
   });
 
   overlay?.addEventListener('click', () => collapseBox());
