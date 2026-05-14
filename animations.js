@@ -121,6 +121,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const s = Flip.getState(ai);
       heroTarget.appendChild(ai);
+      heroTarget.classList.add('is-active');
       ai.classList.add('is-hero-ai--expanded');
 
       heroFlipTween = Flip.from(s, {
@@ -139,6 +140,7 @@ document.addEventListener('DOMContentLoaded', () => {
       hideDetailsNoStagger(() => {
         hideColsAndIcons();
         const s = Flip.getState(ai);
+        heroTarget.classList.remove('is-active');
         ai.classList.remove('is-hero-ai--expanded');
 
         if (originalNext?.parentNode === originalParent) {
