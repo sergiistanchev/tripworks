@@ -121,18 +121,26 @@ function init() {
       killHeroTweens();
       setDetailsHidden();
       prepColsAndIcons();
-      gsap.set(ai.querySelectorAll('[data-gsap="card-content"]'), { display: 'none' });
 
-      const s = Flip.getState(ai);
-      heroTarget.appendChild(ai);
-      heroTarget.classList.add('is-active');
-      ai.classList.add('is-hero-ai--expanded');
-
-      heroFlipTween = Flip.from(s, {
-        duration: 0.9, ease: 'power2.inOut', absolute: true, scale: false, nested: true,
-        onComplete:  () => { heroFlipTween = null; revealColsAndIcons(); revealDetails(); },
-        onInterrupt: () => { heroFlipTween = null; }
+      const cardItems = ai.querySelectorAll('[data-gsap="card-content"]');
+      gsap.to(cardItems, {
+        autoAlpha: 0, scale: 1.12, duration: 0.22, ease: 'power2.in', overwrite: 'auto',
+        onComplete:  () => { gsap.set(cardItems, { display: 'none' }); doHeroFlip(); },
+        onInterrupt: () => { gsap.set(cardItems, { display: 'none' }); doHeroFlip(); }
       });
+
+      function doHeroFlip() {
+        const s = Flip.getState(ai);
+        heroTarget.appendChild(ai);
+        heroTarget.classList.add('is-active');
+        ai.classList.add('is-hero-ai--expanded');
+
+        heroFlipTween = Flip.from(s, {
+          duration: 0.9, ease: 'power2.inOut', absolute: true, scale: false, nested: true,
+          onComplete:  () => { heroFlipTween = null; revealColsAndIcons(); revealDetails(); },
+          onInterrupt: () => { heroFlipTween = null; }
+        });
+      }
     }
 
     function collapseHero(onDone) {
@@ -155,7 +163,16 @@ function init() {
 
         heroFlipTween = Flip.from(s, {
           duration: 0.9, ease: 'power2.inOut', absolute: true, scale: false, nested: true,
-          onComplete:  () => { heroFlipTween = null; gsap.set(ai.querySelectorAll('[data-gsap="card-content"]'), { display: '' }); onDone?.(); },
+          onComplete: () => {
+            heroFlipTween = null;
+            const cardItems = ai.querySelectorAll('[data-gsap="card-content"]');
+            gsap.set(cardItems, { display: '' });
+            gsap.fromTo(cardItems,
+              { autoAlpha: 0, scale: 1.12 },
+              { autoAlpha: 1, scale: 1, duration: 0.35, ease: 'power2.out', stagger: 0.06, overwrite: 'auto' }
+            );
+            onDone?.();
+          },
           onInterrupt: () => { heroFlipTween = null; onDone?.(); }
         });
       });
