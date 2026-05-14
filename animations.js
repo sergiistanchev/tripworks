@@ -5,6 +5,7 @@
  */
 
 function init() {
+  console.log('[GSAP] init() called, readyState:', document.readyState);
   gsap.registerPlugin(Flip, ScrollTrigger);
 
   // ── Shared state ─────────────────────────────────────────────────────────────
@@ -24,6 +25,8 @@ function init() {
   const ai         = document.querySelector('.is-hero-ai');
   const triggerEl  = document.querySelector('.hero-spacer');
   const heroTarget = document.querySelector('.hero-ai-target');
+
+  console.log('[GSAP] hero elements:', { ai, triggerEl, heroTarget });
 
   if (ai && triggerEl && heroTarget) {
     const originalParent = ai.parentNode;
@@ -184,7 +187,9 @@ function init() {
 
   const boxTarget = document.querySelector('[data-gsap="box-target"]');
   const overlay   = document.querySelector('[data-gsap="overlay"]');
-  if (!boxTarget) return;
+  console.log('[GSAP] box elements:', { boxTarget, overlay });
+  console.log('[GSAP] boxes found:', document.querySelectorAll('[data-gsap="box"]').length);
+  if (!boxTarget) { console.warn('[GSAP] box-target not found, aborting'); return; }
 
   let activeBox    = null;
   let activeOrigin = null;
