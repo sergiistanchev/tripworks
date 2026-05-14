@@ -160,7 +160,12 @@ document.addEventListener('DOMContentLoaded', () => {
       start: 'top 50%',
       invalidateOnRefresh: true,
       onEnter:     () => { if (!heroExpanded) closeActive(() => expandHero()); },
-      onLeaveBack: () => { if (heroExpanded)  collapseHero(); }
+      onLeaveBack: () => {
+        if (!heroExpanded) return;
+        // Ignore if FLIP is less than 15% through — scroll jitter, not intentional
+        if (heroFlipTween && heroFlipTween.progress() < 0.15) return;
+        collapseHero();
+      }
     });
 
     window.addEventListener('load', () => {
@@ -183,6 +188,23 @@ document.addEventListener('DOMContentLoaded', () => {
   let activeOrigin = null;
   let boxFlipTween = null;
   let boxRevealTL  = null;
+  let _scrollY     = 0;
+
+  function lockScroll() {
+    _scrollY = window.scrollY;
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.top      = `-${_scrollY}px`;
+    document.body.style.width    = '100%';
+  }
+
+  function unlockScroll() {
+    document.body.style.overflow = '';
+    document.body.style.position = '';
+    document.body.style.top      = '';
+    document.body.style.width    = '';
+    window.scrollTo(0, _scrollY);
+  }
 
   function killBoxTweens() {
     boxFlipTween?.progress(1).kill(); boxFlipTween = null;
@@ -283,10 +305,12 @@ document.addEventListener('DOMContentLoaded', () => {
       activeBox    = box;
       activeOrigin = { parent: box.parentNode, next: box.nextElementSibling };
       state.active = 'box';
+      lockScroll();
 
       const s = Flip.getState(box);
       box.classList.add('is-box--expanded');
       boxTarget.appendChild(box);
+      boxTarget.classList.add('is-active');
       showOverlay();
 
       // 2 — FLIP to expanded position
@@ -326,6 +350,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const s = Flip.getState(box);
       box.classList.remove('is-box--expanded');
 
+      boxTarget.classList.remove('is-active');
+
       if (origin.next?.parentNode === origin.parent) {
         origin.parent.insertBefore(box, origin.next);
       } else {
@@ -341,11 +367,13 @@ document.addEventListener('DOMContentLoaded', () => {
         nested    : true,
         onComplete : () => {
           boxFlipTween = null;
+          unlockScroll();
           revealCardContent(box); // 3 — zoom card content back in
           onDone?.();
         },
         onInterrupt: () => {
           boxFlipTween = null;
+          unlockScroll();
           revealCardContent(box);
           onDone?.();
         }
