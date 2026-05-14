@@ -328,6 +328,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const s = Flip.getState(box);
       box.classList.add('is-box--expanded');
+      box.querySelector('.hero_flip-content')?.classList.add('is-active');
       boxTarget.appendChild(box);
       boxTarget.classList.add('is-active');
       showOverlay();
@@ -370,6 +371,7 @@ document.addEventListener('DOMContentLoaded', () => {
       box.classList.remove('is-box--expanded');
 
       boxTarget.classList.remove('is-active');
+      box.querySelector('.hero_flip-content')?.classList.remove('is-active');
 
       if (origin.next?.parentNode === origin.parent) {
         origin.parent.insertBefore(box, origin.next);
