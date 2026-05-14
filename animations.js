@@ -330,6 +330,7 @@ function init() {
       activeBox    = box;
       activeOrigin = { parent: box.parentNode, next: box.nextElementSibling };
       state.active = 'box';
+      window.lenis?.stop();
 
       const s = Flip.getState(box);
       box.classList.add('is-box--expanded');
@@ -393,11 +394,13 @@ function init() {
         nested    : true,
         onComplete : () => {
           boxFlipTween = null;
+          window.lenis?.start();
           revealCardContent(box); // 3 — zoom card content back in
           onDone?.();
         },
         onInterrupt: () => {
           boxFlipTween = null;
+          window.lenis?.start();
           revealCardContent(box);
           onDone?.();
         }
