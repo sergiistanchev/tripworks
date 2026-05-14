@@ -4,7 +4,7 @@
  * Requires: GSAP, Flip plugin, ScrollTrigger plugin
  */
 
-document.addEventListener('DOMContentLoaded', () => {
+function init() {
   gsap.registerPlugin(Flip, ScrollTrigger);
 
   // ── Shared state ─────────────────────────────────────────────────────────────
@@ -421,5 +421,10 @@ document.addEventListener('DOMContentLoaded', () => {
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') closeActive();
   });
+}
 
-});
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
