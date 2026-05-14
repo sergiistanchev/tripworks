@@ -121,6 +121,7 @@ function init() {
       killHeroTweens();
       setDetailsHidden();
       prepColsAndIcons();
+      gsap.set(ai.querySelectorAll('[data-gsap="card-content"]'), { display: 'none' });
 
       const s = Flip.getState(ai);
       heroTarget.appendChild(ai);
@@ -154,7 +155,7 @@ function init() {
 
         heroFlipTween = Flip.from(s, {
           duration: 0.9, ease: 'power2.inOut', absolute: true, scale: false, nested: true,
-          onComplete:  () => { heroFlipTween = null; onDone?.(); },
+          onComplete:  () => { heroFlipTween = null; gsap.set(ai.querySelectorAll('[data-gsap="card-content"]'), { display: '' }); onDone?.(); },
           onInterrupt: () => { heroFlipTween = null; onDone?.(); }
         });
       });
