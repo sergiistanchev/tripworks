@@ -228,7 +228,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function setCardContentHidden(box) {
     const items = cardContents(box);
-    if (items.length) gsap.set(items, { autoAlpha: 0, scale: 1.12 });
+    if (items.length) gsap.set(items, { display: 'none', autoAlpha: 0, scale: 1.12 });
   }
 
   function hideCardContent(box, onDone) {
@@ -241,14 +241,15 @@ document.addEventListener('DOMContentLoaded', () => {
       ease      : 'power2.in',
       stagger   : 0,
       overwrite : 'auto',
-      onComplete : onDone,
-      onInterrupt: onDone
+      onComplete : () => { gsap.set(items, { display: 'none' }); onDone?.(); },
+      onInterrupt: () => { gsap.set(items, { display: 'none' }); onDone?.(); }
     });
   }
 
   function revealCardContent(box) {
     const items = cardContents(box);
     if (!items.length) return;
+    gsap.set(items, { display: '' });
     gsap.fromTo(items,
       { autoAlpha: 0, scale: 1.12 },
       { autoAlpha: 1, scale: 1, duration: 0.35, ease: 'power2.out', stagger: 0.06, overwrite: 'auto' }
