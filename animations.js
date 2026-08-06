@@ -1,11 +1,202 @@
 /**
- * Webflow GSAP Animations
- * Hero AI (scroll-driven) + Grid Boxes (click-driven)
- * Requires: GSAP, Flip plugin, ScrollTrigger plugin
+ * TripWorks homepage interactions.
+ * Optional dependencies: Swiper; GSAP + Flip + ScrollTrigger.
+ * Every feature is guarded by its required DOM and dependency checks.
  */
 
-function init() {
-  console.log('[GSAP] init() called, readyState:', document.readyState);
+const onReady = callback => {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', callback, { once: true });
+  } else {
+    callback();
+  }
+};
+
+function initTypewriter() {
+  const el = document.querySelector('[data-type]');
+  if (!el) return;
+
+  const phrases = (el.getAttribute('data-type') || '')
+    .split(',')
+    .map(phrase => phrase.trim())
+    .filter(Boolean);
+
+  if (!phrases.length) return;
+
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    el.textContent = phrases[0];
+    return;
+  }
+
+  if (!document.getElementById('typewriter-cursor-style')) {
+    const style = document.createElement('style');
+    style.id = 'typewriter-cursor-style';
+    style.textContent = `
+      .tw-cursor { display:inline-block; margin-left:.08em; width:.6ch; animation:twBlink 1s step-end infinite; }
+      @keyframes twBlink { 50% { opacity:0; } }
+    `;
+    document.head.appendChild(style);
+  }
+
+  const cursor = document.createElement('span');
+  cursor.className = 'tw-cursor';
+  cursor.textContent = '|';
+
+  let phraseIndex = 0;
+  let charIndex = 0;
+  let deleting = false;
+  let timer;
+
+  const render = text => {
+    el.textContent = text;
+    el.appendChild(cursor);
+  };
+
+  const tick = () => {
+    const phrase = phrases[phraseIndex];
+    charIndex += deleting ? -1 : 1;
+    render(phrase.slice(0, Math.max(0, charIndex)));
+
+    let delay = deleting ? 35 : 60;
+    if (!deleting && charIndex >= phrase.length) {
+      deleting = true;
+      delay = 1000;
+    } else if (deleting && charIndex <= 0) {
+      deleting = false;
+      phraseIndex = (phraseIndex + 1) % phrases.length;
+      delay = 250;
+    }
+
+    timer = window.setTimeout(tick, delay);
+  };
+
+  document.addEventListener('visibilitychange', () => {
+    window.clearTimeout(timer);
+    if (!document.hidden) tick();
+  });
+
+  render('');
+  tick();
+}
+
+function initResponsiveSwipers() {
+  if (!window.Swiper) return;
+
+  const update = () => {
+    document.querySelectorAll('.hero_slider').forEach(wrapper => {
+      const container = wrapper.querySelector('.swiper-container');
+      if (!container) return;
+
+      if (window.innerWidth <= 991) {
+        if (container.swiper) return container.swiper.update();
+        new Swiper(container, {
+          slidesPerView: 'auto', slidesPerGroup: 1, spaceBetween: 16, speed: 400,
+          watchOverflow: true, observer: true, observeParents: true,
+          navigation: {
+            prevEl: wrapper.querySelector('.hero-prev'),
+            nextEl: wrapper.querySelector('.hero-next')
+          }
+        });
+      } else if (container.swiper) {
+        container.swiper.destroy(true, true);
+      }
+    });
+
+    document.querySelectorAll('.swiper_slider').forEach(wrapper => {
+      const container = wrapper.querySelector('.swiper-container');
+      if (!container) return;
+
+      if (window.innerWidth <= 767) {
+        if (container.swiper) return container.swiper.update();
+        new Swiper(container, {
+          slidesPerView: 'auto', speed: 350, allowTouchMove: true, spaceBetween: 16,
+          loop: true, watchOverflow: true, observer: true, observeParents: true,
+          observeSlideChildren: true,
+          navigation: {
+            nextEl: wrapper.querySelector('.swiper-next'),
+            prevEl: wrapper.querySelector('.swiper-prev')
+          }
+        });
+      } else if (container.swiper) {
+        container.swiper.destroy(true, true);
+      }
+    });
+  };
+
+  let resizeTimer;
+  const scheduleUpdate = () => {
+    window.clearTimeout(resizeTimer);
+    resizeTimer = window.setTimeout(update, 150);
+  };
+
+  update();
+  window.addEventListener('resize', scheduleUpdate, { passive: true });
+  window.addEventListener('orientationchange', scheduleUpdate, { passive: true });
+}
+
+function initScrollReveals() {
+  if (!window.gsap || !window.ScrollTrigger) return;
+  const elements = document.querySelectorAll('[gsap]');
+  if (!elements.length) return;
+
+  gsap.registerPlugin(ScrollTrigger);
+  elements.forEach(element => {
+    const direction = element.getAttribute('gsap');
+    const from = direction === 'from-left'
+      ? { x: '-6rem', y: '5rem', rotationZ: '6deg', opacity: 0 }
+      : direction === 'from-right'
+        ? { x: '6rem', y: '5rem', rotationZ: '-6deg', opacity: 0 }
+        : { opacity: 0 };
+
+    gsap.fromTo(element, from, {
+      x: 0, y: 0, rotationZ: 0, opacity: 1, ease: 'power1.out',
+      scrollTrigger: {
+        trigger: element,
+        start: 'top bottom',
+        end: `top ${element.getAttribute('gsap-end') || '50%'}`,
+        scrub: 0.3
+      }
+    });
+  });
+}
+
+function initSyncedHeroSwiper() {
+  if (!window.Swiper) return;
+  const cardEl = document.querySelector('.hero-card-swiper');
+  const imageEl = document.querySelector('.hero-image-swiper');
+  const tabs = [...document.querySelectorAll('.hero-tab')];
+  if (!cardEl || !imageEl || !tabs.length) return;
+
+  const cardSwiper = new Swiper(cardEl, {
+    slidesPerView: 1, slidesPerGroup: 1, speed: 850, spaceBetween: 32,
+    loop: true, allowTouchMove: false
+  });
+
+  const sync = (swiper, speed) => {
+    cardSwiper.slideToLoop(swiper.realIndex, speed);
+    tabs.forEach((tab, index) => tab.classList.toggle('is-active', index === swiper.realIndex));
+  };
+
+  const imageSwiper = new Swiper(imageEl, {
+    slidesPerView: 1, slidesPerGroup: 1, speed: 850, spaceBetween: 0, loop: true,
+    autoplay: { delay: 5000, disableOnInteraction: false, pauseOnMouseEnter: true },
+    on: {
+      init: swiper => sync(swiper, 0),
+      realIndexChange: swiper => sync(swiper, 850)
+    }
+  });
+
+  tabs.forEach((tab, index) => {
+    tab.addEventListener('click', () => {
+      imageSwiper.slideToLoop(index, 850);
+      imageSwiper.autoplay?.start();
+    });
+  });
+}
+
+function initGsapInteractions() {
+  if (!window.gsap || !window.Flip || !window.ScrollTrigger) return;
+  gsap.ticker.lagSmoothing(0);
   gsap.registerPlugin(Flip, ScrollTrigger);
 
   // ── Shared state ─────────────────────────────────────────────────────────────
@@ -25,8 +216,6 @@ function init() {
   const ai         = document.querySelector('.is-hero-ai');
   const triggerEl  = document.querySelector('.hero-spacer');
   const heroTarget = document.querySelector('.hero-ai-target');
-
-  console.log('[GSAP] hero elements:', { ai, triggerEl, heroTarget });
 
   if (ai && triggerEl && heroTarget) {
     const originalParent = ai.parentNode;
@@ -205,9 +394,7 @@ function init() {
 
   const boxTarget = document.querySelector('[data-gsap="box-target"]');
   const overlay   = document.querySelector('[data-gsap="overlay"]');
-  console.log('[GSAP] box elements:', { boxTarget, overlay });
-  console.log('[GSAP] boxes found:', document.querySelectorAll('[data-gsap="box"]').length);
-  if (!boxTarget) { console.warn('[GSAP] box-target not found, aborting'); return; }
+  if (!boxTarget) return;
 
   let activeBox    = null;
   let activeOrigin = null;
@@ -448,8 +635,10 @@ function init() {
   });
 }
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', init);
-} else {
-  init();
-}
+onReady(() => {
+  initTypewriter();
+  initResponsiveSwipers();
+  initScrollReveals();
+  initSyncedHeroSwiper();
+  initGsapInteractions();
+});
