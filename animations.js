@@ -1,11 +1,417 @@
 /**
- * Webflow GSAP Animations
- * Hero AI (scroll-driven) + Grid Boxes (click-driven)
- * Requires: GSAP, Flip plugin, ScrollTrigger plugin
+ * TripWorks homepage interactions.
+ * Optional dependencies: Swiper; GSAP + Flip + ScrollTrigger.
+ * Every feature is guarded by its required DOM and dependency checks.
  */
 
-function init() {
-  console.log('[GSAP] init() called, readyState:', document.readyState);
+const onReady = callback => {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', callback, { once: true });
+  } else {
+    callback();
+  }
+};
+
+const runtimeSources = {
+  swiper: 'https://cdn.jsdelivr.net/npm/swiper@10/swiper-bundle.min.js',
+  gsap: 'https://cdn.prod.website-files.com/gsap/3.15.0/gsap.min.js',
+  flip: 'https://cdn.prod.website-files.com/gsap/3.15.0/Flip.min.js',
+  scrollTrigger: 'https://cdn.prod.website-files.com/gsap/3.15.0/ScrollTrigger.min.js'
+};
+
+const runtimeLoads = new Map();
+
+function loadRuntimeScript(src, isReady) {
+  if (isReady()) return Promise.resolve();
+  if (runtimeLoads.has(src)) return runtimeLoads.get(src);
+
+  const promise = new Promise((resolve, reject) => {
+    const existing = [...document.scripts].find(script => script.src === src);
+    const script = existing || document.createElement('script');
+
+    const finish = () => isReady()
+      ? resolve()
+      : reject(new Error(`Loaded ${src}, but its browser API is unavailable.`));
+
+    script.addEventListener('load', finish, { once: true });
+    script.addEventListener('error', () => reject(new Error(`Unable to load ${src}.`)), { once: true });
+
+    if (!existing) {
+      script.src = src;
+      script.async = true;
+      script.dataset.tripworksRuntime = 'true';
+      document.head.appendChild(script);
+    }
+  });
+
+  runtimeLoads.set(src, promise);
+  return promise;
+}
+
+async function ensureSwiper() {
+  await loadRuntimeScript(runtimeSources.swiper, () => Boolean(window.Swiper));
+}
+
+async function ensureGsap() {
+  await loadRuntimeScript(runtimeSources.gsap, () => Boolean(window.gsap));
+  await Promise.all([
+    loadRuntimeScript(runtimeSources.flip, () => Boolean(window.Flip)),
+    loadRuntimeScript(runtimeSources.scrollTrigger, () => Boolean(window.ScrollTrigger))
+  ]);
+}
+
+function scheduleNonCriticalWork(callback) {
+  let started = false;
+
+  const run = () => {
+    if (started) return;
+    started = true;
+    callback();
+  };
+
+  const schedule = () => {
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if ('requestIdleCallback' in window) {
+        window.requestIdleCallback(run, { timeout: 1200 });
+      } else {
+        window.setTimeout(run, 250);
+      }
+    }));
+  };
+
+  if (document.readyState === 'complete') schedule();
+  else window.addEventListener('load', schedule, { once: true });
+
+  ['pointerover', 'touchstart', 'keydown', 'wheel'].forEach(eventName => {
+    document.addEventListener(eventName, run, { once: true, passive: true });
+  });
+}
+
+function initProgressiveTextReveal() {
+  const setup = () => {
+    const elements = [...document.querySelectorAll('[gsap-text]')];
+    if (!elements.length) return;
+
+    if (!document.getElementById('tw-progress-text-style')) {
+      const style = document.createElement('style');
+      style.id = 'tw-progress-text-style';
+      style.textContent = `
+        .tw-progress-word { display:inline-block; }
+        .tw-progress-letter {
+          display:inline-block;
+          opacity:calc(.3 + (var(--tw-progress, 0) * .7));
+          transform:translate3d(calc((1 - var(--tw-progress, 0)) * .1em), 0, 0);
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .tw-progress-letter { opacity:1; transform:none; }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const entries = elements.map(element => {
+      const text = (element.getAttribute('aria-label') || element.textContent || '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      if (!text) return null;
+
+      element.setAttribute('aria-label', text);
+      element.textContent = '';
+      element.dataset.twProgressText = 'ready';
+
+      const fragment = document.createDocumentFragment();
+      const letters = [];
+
+      text.split(' ').forEach((word, wordIndex, words) => {
+        const wordSpan = document.createElement('span');
+        wordSpan.className = 'tw-progress-word';
+        wordSpan.setAttribute('aria-hidden', 'true');
+
+        [...word].forEach(character => {
+          const letter = document.createElement('span');
+          letter.className = 'tw-progress-letter';
+          letter.textContent = character;
+          wordSpan.appendChild(letter);
+          letters.push(letter);
+        });
+
+        fragment.appendChild(wordSpan);
+        if (wordIndex < words.length - 1) fragment.appendChild(document.createTextNode(' '));
+      });
+
+      element.appendChild(fragment);
+
+      return {
+        element,
+        letters
+      };
+    }).filter(Boolean);
+
+    if (!entries.length || reducedMotion) return;
+
+    let frameRequested = false;
+
+    const update = () => {
+      frameRequested = false;
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+      const startLine = viewportHeight * .85;
+
+      entries.forEach(({ element, letters }) => {
+        const rect = element.getBoundingClientRect();
+        // Finish just before the exact midpoint so subpixel scroll rounding
+        // cannot leave the final letters slightly translucent at center.
+        const endLine = (viewportHeight - rect.height) / 2 + 2;
+        const travel = Math.max(1, startLine - endLine);
+        const progress = Math.min(1, Math.max(0, (startLine - rect.top) / travel));
+        const fadeWindow = .08;
+        const revealLead = .08;
+        const lastIndex = Math.max(1, letters.length - 1);
+
+        letters.forEach((letter, index) => {
+          const position = index / lastIndex;
+          const localProgress = Math.min(1, Math.max(0, (progress - position + revealLead) / fadeWindow));
+          letter.style.setProperty('--tw-progress', localProgress.toFixed(3));
+        });
+      });
+    };
+
+    const requestUpdate = () => {
+      if (frameRequested) return;
+      frameRequested = true;
+      window.requestAnimationFrame(update);
+    };
+
+    update();
+    window.addEventListener('scroll', requestUpdate, { passive: true });
+    window.addEventListener('resize', requestUpdate, { passive: true });
+  };
+
+  const scheduleSetup = () => window.requestAnimationFrame(setup);
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', scheduleSetup, { once: true });
+  } else {
+    scheduleSetup();
+  }
+}
+
+function initTypewriter() {
+  const el = document.querySelector('[data-type]');
+  if (!el) return;
+
+  const phrases = (el.getAttribute('data-type') || '')
+    .split(',')
+    .map(phrase => phrase.trim())
+    .filter(Boolean);
+
+  if (!phrases.length) return;
+
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    el.textContent = phrases[0];
+    return;
+  }
+
+  if (!document.getElementById('typewriter-cursor-style')) {
+    const style = document.createElement('style');
+    style.id = 'typewriter-cursor-style';
+    style.textContent = `
+      .tw-cursor { display:inline-block; margin-left:.08em; width:.6ch; animation:twBlink 1s step-end infinite; }
+      @keyframes twBlink { 50% { opacity:0; } }
+    `;
+    document.head.appendChild(style);
+  }
+
+  const cursor = document.createElement('span');
+  cursor.className = 'tw-cursor';
+  cursor.textContent = '|';
+
+  let phraseIndex = 0;
+  let charIndex = 0;
+  let deleting = false;
+  let timer;
+
+  const render = text => {
+    el.textContent = text;
+    el.appendChild(cursor);
+  };
+
+  const tick = () => {
+    const phrase = phrases[phraseIndex];
+    charIndex += deleting ? -1 : 1;
+    render(phrase.slice(0, Math.max(0, charIndex)));
+
+    let delay = deleting ? 35 : 60;
+    if (!deleting && charIndex >= phrase.length) {
+      deleting = true;
+      delay = 1000;
+    } else if (deleting && charIndex <= 0) {
+      deleting = false;
+      phraseIndex = (phraseIndex + 1) % phrases.length;
+      delay = 250;
+    }
+
+    timer = window.setTimeout(tick, delay);
+  };
+
+  document.addEventListener('visibilitychange', () => {
+    window.clearTimeout(timer);
+    if (!document.hidden) tick();
+  });
+
+  render('');
+  tick();
+}
+
+function initResponsiveSwipers() {
+  if (!window.Swiper) return;
+
+  const update = () => {
+    document.querySelectorAll('.hero_slider').forEach(wrapper => {
+      const container = wrapper.querySelector('.swiper-container');
+      if (!container) return;
+
+      if (window.innerWidth <= 991) {
+        if (container.swiper) return;
+        new Swiper(container, {
+          slidesPerView: 'auto', slidesPerGroup: 1, spaceBetween: 16, speed: 400,
+          watchOverflow: true, resizeObserver: false,
+          navigation: {
+            prevEl: wrapper.querySelector('.hero-prev'),
+            nextEl: wrapper.querySelector('.hero-next')
+          }
+        });
+      } else if (container.swiper) {
+        container.swiper.destroy(true, true);
+      }
+    });
+
+    document.querySelectorAll('.swiper_slider').forEach(wrapper => {
+      const container = wrapper.querySelector('.swiper-container');
+      if (!container) return;
+
+      if (window.innerWidth <= 767) {
+        if (container.swiper) return;
+        new Swiper(container, {
+          slidesPerView: 'auto', speed: 350, allowTouchMove: true, spaceBetween: 16,
+          rewind: true, watchOverflow: true, resizeObserver: false,
+          navigation: {
+            nextEl: wrapper.querySelector('.swiper-next'),
+            prevEl: wrapper.querySelector('.swiper-prev')
+          }
+        });
+      } else if (container.swiper) {
+        container.swiper.destroy(true, true);
+      }
+    });
+  };
+
+  let resizeTimer;
+  const scheduleUpdate = () => {
+    window.clearTimeout(resizeTimer);
+    resizeTimer = window.setTimeout(update, 150);
+  };
+
+  update();
+  window.addEventListener('resize', scheduleUpdate, { passive: true });
+  window.addEventListener('orientationchange', scheduleUpdate, { passive: true });
+}
+
+function initScrollReveals() {
+  if (!window.gsap || !window.ScrollTrigger) return;
+  const elements = document.querySelectorAll('[gsap]');
+  if (!elements.length) return;
+
+  gsap.registerPlugin(ScrollTrigger);
+  const fold = window.innerHeight * 1.05;
+  const revealItems = [...elements].map(element => ({
+    element,
+    aboveFold: element.getBoundingClientRect().top <= fold
+  }));
+
+  revealItems.forEach(({ element, aboveFold }) => {
+    if (aboveFold) {
+      gsap.set(element, { x: 0, y: 0, rotationZ: 0, opacity: 1 });
+      return;
+    }
+
+    const direction = element.getAttribute('gsap');
+    const from = direction === 'from-left'
+      ? { x: '-6rem', y: '5rem', rotationZ: '6deg', opacity: 0 }
+      : direction === 'from-right'
+        ? { x: '6rem', y: '5rem', rotationZ: '-6deg', opacity: 0 }
+        : { opacity: 0 };
+
+    gsap.fromTo(element, from, {
+      x: 0, y: 0, rotationZ: 0, opacity: 1, ease: 'power1.out',
+      scrollTrigger: {
+        trigger: element,
+        start: 'top bottom',
+        end: `top ${element.getAttribute('gsap-end') || '50%'}`,
+        scrub: 0.3
+      }
+    });
+  });
+}
+
+function initSyncedHeroSwiper() {
+  if (!window.Swiper) return;
+  const cardEl = document.querySelector('.hero-card-swiper');
+  const imageEl = document.querySelector('.hero-image-swiper');
+  const tabs = [...document.querySelectorAll('.hero-tab')];
+  if (!cardEl || !imageEl || !tabs.length) return;
+
+  const cardSwiper = new Swiper(cardEl, {
+    slidesPerView: 1, slidesPerGroup: 1, speed: 850, spaceBetween: 32,
+    // `rewind` preserves the circular experience without creating loop clones.
+    // Cloned hero images can become late LCP candidates after initial render.
+    rewind: true, allowTouchMove: false
+  });
+
+  const sync = (swiper, speed) => {
+    cardSwiper.slideTo(swiper.realIndex, speed);
+    tabs.forEach((tab, index) => tab.classList.toggle('is-active', index === swiper.realIndex));
+  };
+
+  const imageSwiper = new Swiper(imageEl, {
+    slidesPerView: 1, slidesPerGroup: 1, speed: 850, spaceBetween: 0,
+    rewind: true,
+    on: {
+      init: swiper => sync(swiper, 0),
+      realIndexChange: swiper => sync(swiper, 850)
+    }
+  });
+
+  // Autoplay begins only after genuine visitor intent. This keeps the first hero
+  // image stable during LCP measurement while preserving rotation for visitors.
+  let autoplayTimer;
+  const startAutoplay = () => {
+    if (autoplayTimer || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    autoplayTimer = window.setInterval(() => imageSwiper.slideNext(850), 5000);
+  };
+
+  const intentEvents = ['pointerdown', 'touchstart', 'keydown', 'wheel'];
+  const onIntent = () => {
+    startAutoplay();
+    intentEvents.forEach(eventName => document.removeEventListener(eventName, onIntent));
+  };
+  intentEvents.forEach(eventName => document.addEventListener(eventName, onIntent, {
+    passive: true,
+    once: true
+  }));
+
+  tabs.forEach((tab, index) => {
+    tab.addEventListener('click', () => {
+      imageSwiper.slideTo(index, 850);
+      startAutoplay();
+    });
+  });
+}
+
+function initGsapInteractions() {
+  if (!window.gsap || !window.Flip || !window.ScrollTrigger) return;
+  gsap.ticker.lagSmoothing(0);
   gsap.registerPlugin(Flip, ScrollTrigger);
 
   // ── Shared state ─────────────────────────────────────────────────────────────
@@ -25,8 +431,6 @@ function init() {
   const ai         = document.querySelector('.is-hero-ai');
   const triggerEl  = document.querySelector('.hero-spacer');
   const heroTarget = document.querySelector('.hero-ai-target');
-
-  console.log('[GSAP] hero elements:', { ai, triggerEl, heroTarget });
 
   if (ai && triggerEl && heroTarget) {
     const originalParent = ai.parentNode;
@@ -191,11 +595,13 @@ function init() {
       }
     });
 
-    window.addEventListener('load', () => {
+    const prepareHeroInteraction = () => {
       setDetailsHidden();
       prepColsAndIcons();
-      ScrollTrigger.refresh();
-    });
+    };
+
+    if (document.readyState === 'complete') prepareHeroInteraction();
+    else window.addEventListener('load', prepareHeroInteraction, { once: true });
   }
 
 
@@ -205,9 +611,7 @@ function init() {
 
   const boxTarget = document.querySelector('[data-gsap="box-target"]');
   const overlay   = document.querySelector('[data-gsap="overlay"]');
-  console.log('[GSAP] box elements:', { boxTarget, overlay });
-  console.log('[GSAP] boxes found:', document.querySelectorAll('[data-gsap="box"]').length);
-  if (!boxTarget) { console.warn('[GSAP] box-target not found, aborting'); return; }
+  if (!boxTarget) return;
 
   let activeBox    = null;
   let activeOrigin = null;
@@ -448,8 +852,37 @@ function init() {
   });
 }
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', init);
-} else {
-  init();
-}
+onReady(() => {
+  initTypewriter();
+  initProgressiveTextReveal();
+
+  scheduleNonCriticalWork(async () => {
+    const needsSwiper = document.querySelector(
+      '.hero_slider, .swiper_slider, .hero-card-swiper, .hero-image-swiper'
+    );
+    const needsGsap = document.querySelector(
+      '[gsap], .is-hero-ai, [data-gsap="box"], [data-gsap="box-target"]'
+    );
+
+    const tasks = [];
+
+    if (needsSwiper) {
+      tasks.push(ensureSwiper().then(() => {
+        initResponsiveSwipers();
+        initSyncedHeroSwiper();
+      }));
+    }
+
+    if (needsGsap) {
+      tasks.push(ensureGsap().then(() => {
+        initScrollReveals();
+        initGsapInteractions();
+      }));
+    }
+
+    const results = await Promise.allSettled(tasks);
+    results.forEach(result => {
+      if (result.status === 'rejected') console.warn('[TripWorks interactions]', result.reason);
+    });
+  });
+});
