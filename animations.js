@@ -169,27 +169,47 @@ function initSyncedHeroSwiper() {
 
   const cardSwiper = new Swiper(cardEl, {
     slidesPerView: 1, slidesPerGroup: 1, speed: 850, spaceBetween: 32,
-    loop: true, allowTouchMove: false
+    // `rewind` preserves the circular experience without creating loop clones.
+    // Cloned hero images can become late LCP candidates after initial render.
+    rewind: true, allowTouchMove: false
   });
 
   const sync = (swiper, speed) => {
-    cardSwiper.slideToLoop(swiper.realIndex, speed);
+    cardSwiper.slideTo(swiper.realIndex, speed);
     tabs.forEach((tab, index) => tab.classList.toggle('is-active', index === swiper.realIndex));
   };
 
   const imageSwiper = new Swiper(imageEl, {
-    slidesPerView: 1, slidesPerGroup: 1, speed: 850, spaceBetween: 0, loop: true,
-    autoplay: { delay: 5000, disableOnInteraction: false, pauseOnMouseEnter: true },
+    slidesPerView: 1, slidesPerGroup: 1, speed: 850, spaceBetween: 0,
+    rewind: true,
     on: {
       init: swiper => sync(swiper, 0),
       realIndexChange: swiper => sync(swiper, 850)
     }
   });
 
+  // Autoplay begins only after genuine visitor intent. This keeps the first hero
+  // image stable during LCP measurement while preserving rotation for visitors.
+  let autoplayTimer;
+  const startAutoplay = () => {
+    if (autoplayTimer || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    autoplayTimer = window.setInterval(() => imageSwiper.slideNext(850), 5000);
+  };
+
+  const intentEvents = ['pointerdown', 'touchstart', 'keydown', 'wheel'];
+  const onIntent = () => {
+    startAutoplay();
+    intentEvents.forEach(eventName => document.removeEventListener(eventName, onIntent));
+  };
+  intentEvents.forEach(eventName => document.addEventListener(eventName, onIntent, {
+    passive: true,
+    once: true
+  }));
+
   tabs.forEach((tab, index) => {
     tab.addEventListener('click', () => {
-      imageSwiper.slideToLoop(index, 850);
-      imageSwiper.autoplay?.start();
+      imageSwiper.slideTo(index, 850);
+      startAutoplay();
     });
   });
 }
