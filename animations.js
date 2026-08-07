@@ -12,6 +12,81 @@ const onReady = callback => {
   }
 };
 
+const runtimeSources = {
+  swiper: 'https://cdn.jsdelivr.net/npm/swiper@10/swiper-bundle.min.js',
+  gsap: 'https://cdn.prod.website-files.com/gsap/3.15.0/gsap.min.js',
+  flip: 'https://cdn.prod.website-files.com/gsap/3.15.0/Flip.min.js',
+  scrollTrigger: 'https://cdn.prod.website-files.com/gsap/3.15.0/ScrollTrigger.min.js'
+};
+
+const runtimeLoads = new Map();
+
+function loadRuntimeScript(src, isReady) {
+  if (isReady()) return Promise.resolve();
+  if (runtimeLoads.has(src)) return runtimeLoads.get(src);
+
+  const promise = new Promise((resolve, reject) => {
+    const existing = [...document.scripts].find(script => script.src === src);
+    const script = existing || document.createElement('script');
+
+    const finish = () => isReady()
+      ? resolve()
+      : reject(new Error(`Loaded ${src}, but its browser API is unavailable.`));
+
+    script.addEventListener('load', finish, { once: true });
+    script.addEventListener('error', () => reject(new Error(`Unable to load ${src}.`)), { once: true });
+
+    if (!existing) {
+      script.src = src;
+      script.async = true;
+      script.dataset.tripworksRuntime = 'true';
+      document.head.appendChild(script);
+    }
+  });
+
+  runtimeLoads.set(src, promise);
+  return promise;
+}
+
+async function ensureSwiper() {
+  await loadRuntimeScript(runtimeSources.swiper, () => Boolean(window.Swiper));
+}
+
+async function ensureGsap() {
+  await loadRuntimeScript(runtimeSources.gsap, () => Boolean(window.gsap));
+  await Promise.all([
+    loadRuntimeScript(runtimeSources.flip, () => Boolean(window.Flip)),
+    loadRuntimeScript(runtimeSources.scrollTrigger, () => Boolean(window.ScrollTrigger))
+  ]);
+}
+
+function scheduleNonCriticalWork(callback) {
+  let started = false;
+
+  const run = () => {
+    if (started) return;
+    started = true;
+    callback();
+  };
+
+  const schedule = () => {
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if ('requestIdleCallback' in window) {
+        window.requestIdleCallback(run, { timeout: 1200 });
+      } else {
+        window.setTimeout(run, 250);
+      }
+    }));
+  };
+
+  if (document.readyState === 'complete') schedule();
+  else window.addEventListener('load', schedule, { once: true });
+
+  ['pointerover', 'touchstart', 'keydown', 'wheel'].forEach(eventName => {
+    document.addEventListener(eventName, run, { once: true, passive: true });
+  });
+}
+
 function initTypewriter() {
   const el = document.querySelector('[data-type]');
   if (!el) return;
@@ -88,10 +163,10 @@ function initResponsiveSwipers() {
       if (!container) return;
 
       if (window.innerWidth <= 991) {
-        if (container.swiper) return container.swiper.update();
+        if (container.swiper) return;
         new Swiper(container, {
           slidesPerView: 'auto', slidesPerGroup: 1, spaceBetween: 16, speed: 400,
-          watchOverflow: true, observer: true, observeParents: true,
+          watchOverflow: true, resizeObserver: false,
           navigation: {
             prevEl: wrapper.querySelector('.hero-prev'),
             nextEl: wrapper.querySelector('.hero-next')
@@ -107,11 +182,10 @@ function initResponsiveSwipers() {
       if (!container) return;
 
       if (window.innerWidth <= 767) {
-        if (container.swiper) return container.swiper.update();
+        if (container.swiper) return;
         new Swiper(container, {
           slidesPerView: 'auto', speed: 350, allowTouchMove: true, spaceBetween: 16,
-          loop: true, watchOverflow: true, observer: true, observeParents: true,
-          observeSlideChildren: true,
+          rewind: true, watchOverflow: true, resizeObserver: false,
           navigation: {
             nextEl: wrapper.querySelector('.swiper-next'),
             prevEl: wrapper.querySelector('.swiper-prev')
@@ -140,7 +214,18 @@ function initScrollReveals() {
   if (!elements.length) return;
 
   gsap.registerPlugin(ScrollTrigger);
-  elements.forEach(element => {
+  const fold = window.innerHeight * 1.05;
+  const revealItems = [...elements].map(element => ({
+    element,
+    aboveFold: element.getBoundingClientRect().top <= fold
+  }));
+
+  revealItems.forEach(({ element, aboveFold }) => {
+    if (aboveFold) {
+      gsap.set(element, { x: 0, y: 0, rotationZ: 0, opacity: 1 });
+      return;
+    }
+
     const direction = element.getAttribute('gsap');
     const from = direction === 'from-left'
       ? { x: '-6rem', y: '5rem', rotationZ: '6deg', opacity: 0 }
@@ -400,11 +485,13 @@ function initGsapInteractions() {
       }
     });
 
-    window.addEventListener('load', () => {
+    const prepareHeroInteraction = () => {
       setDetailsHidden();
       prepColsAndIcons();
-      ScrollTrigger.refresh();
-    });
+    };
+
+    if (document.readyState === 'complete') prepareHeroInteraction();
+    else window.addEventListener('load', prepareHeroInteraction, { once: true });
   }
 
 
@@ -657,8 +744,34 @@ function initGsapInteractions() {
 
 onReady(() => {
   initTypewriter();
-  initResponsiveSwipers();
-  initScrollReveals();
-  initSyncedHeroSwiper();
-  initGsapInteractions();
+
+  scheduleNonCriticalWork(async () => {
+    const needsSwiper = document.querySelector(
+      '.hero_slider, .swiper_slider, .hero-card-swiper, .hero-image-swiper'
+    );
+    const needsGsap = document.querySelector(
+      '[gsap], .is-hero-ai, [data-gsap="box"], [data-gsap="box-target"]'
+    );
+
+    const tasks = [];
+
+    if (needsSwiper) {
+      tasks.push(ensureSwiper().then(() => {
+        initResponsiveSwipers();
+        initSyncedHeroSwiper();
+      }));
+    }
+
+    if (needsGsap) {
+      tasks.push(ensureGsap().then(() => {
+        initScrollReveals();
+        initGsapInteractions();
+      }));
+    }
+
+    const results = await Promise.allSettled(tasks);
+    results.forEach(result => {
+      if (result.status === 'rejected') console.warn('[TripWorks interactions]', result.reason);
+    });
+  });
 });
