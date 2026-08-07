@@ -87,6 +87,109 @@ function scheduleNonCriticalWork(callback) {
   });
 }
 
+function initProgressiveTextReveal() {
+  const setup = () => {
+    const elements = [...document.querySelectorAll('[gsap-text]')];
+    if (!elements.length) return;
+
+    if (!document.getElementById('tw-progress-text-style')) {
+      const style = document.createElement('style');
+      style.id = 'tw-progress-text-style';
+      style.textContent = `
+        .tw-progress-word { display:inline-block; }
+        .tw-progress-letter {
+          display:inline-block;
+          opacity:calc(.3 + (var(--tw-progress, 0) * .7));
+          transform:translate3d(calc((1 - var(--tw-progress, 0)) * .2em), 0, 0);
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .tw-progress-letter { opacity:1; transform:none; }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const entries = elements.map(element => {
+      const text = (element.getAttribute('aria-label') || element.textContent || '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      if (!text) return null;
+
+      element.setAttribute('aria-label', text);
+      element.textContent = '';
+      element.dataset.twProgressText = 'ready';
+
+      const fragment = document.createDocumentFragment();
+      const letters = [];
+
+      text.split(' ').forEach((word, wordIndex, words) => {
+        const wordSpan = document.createElement('span');
+        wordSpan.className = 'tw-progress-word';
+        wordSpan.setAttribute('aria-hidden', 'true');
+
+        [...word].forEach(character => {
+          const letter = document.createElement('span');
+          letter.className = 'tw-progress-letter';
+          letter.textContent = character;
+          wordSpan.appendChild(letter);
+          letters.push(letter);
+        });
+
+        fragment.appendChild(wordSpan);
+        if (wordIndex < words.length - 1) fragment.appendChild(document.createTextNode(' '));
+      });
+
+      element.appendChild(fragment);
+
+      return {
+        element,
+        letters,
+        trigger: element.closest('section') || element.parentElement || element
+      };
+    }).filter(Boolean);
+
+    if (!entries.length || reducedMotion) return;
+
+    let frameRequested = false;
+
+    const update = () => {
+      frameRequested = false;
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+      const startLine = viewportHeight * .82;
+      const endLine = viewportHeight * .35;
+
+      entries.forEach(({ letters, trigger }) => {
+        const rect = trigger.getBoundingClientRect();
+        const travel = Math.max(1, rect.height + startLine - endLine);
+        const progress = Math.min(1, Math.max(0, (startLine - rect.top) / travel));
+        const fadeWindow = .08;
+        const lastIndex = Math.max(1, letters.length - 1);
+
+        letters.forEach((letter, index) => {
+          const position = index / lastIndex;
+          const localProgress = Math.min(1, Math.max(0, (progress - position) / fadeWindow));
+          letter.style.setProperty('--tw-progress', localProgress.toFixed(3));
+        });
+      });
+    };
+
+    const requestUpdate = () => {
+      if (frameRequested) return;
+      frameRequested = true;
+      window.requestAnimationFrame(update);
+    };
+
+    update();
+    window.addEventListener('scroll', requestUpdate, { passive: true });
+    window.addEventListener('resize', requestUpdate, { passive: true });
+  };
+
+  if (document.readyState === 'complete') setup();
+  else window.addEventListener('load', () => window.requestAnimationFrame(setup), { once: true });
+}
+
 function initTypewriter() {
   const el = document.querySelector('[data-type]');
   if (!el) return;
@@ -744,6 +847,7 @@ function initGsapInteractions() {
 
 onReady(() => {
   initTypewriter();
+  initProgressiveTextReveal();
 
   scheduleNonCriticalWork(async () => {
     const needsSwiper = document.querySelector(
