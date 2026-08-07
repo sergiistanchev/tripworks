@@ -160,7 +160,9 @@ function initProgressiveTextReveal() {
 
       entries.forEach(({ element, letters }) => {
         const rect = element.getBoundingClientRect();
-        const endLine = (viewportHeight - rect.height) / 2;
+        // Finish just before the exact midpoint so subpixel scroll rounding
+        // cannot leave the final letters slightly translucent at center.
+        const endLine = (viewportHeight - rect.height) / 2 + 2;
         const travel = Math.max(1, startLine - endLine);
         const progress = Math.min(1, Math.max(0, (startLine - rect.top) / travel));
         const fadeWindow = .08;
