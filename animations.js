@@ -145,8 +145,7 @@ function initProgressiveTextReveal() {
 
       return {
         element,
-        letters,
-        trigger: element.closest('section') || element.parentElement || element
+        letters
       };
     }).filter(Boolean);
 
@@ -157,12 +156,12 @@ function initProgressiveTextReveal() {
     const update = () => {
       frameRequested = false;
       const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
-      const startLine = viewportHeight * .82;
-      const endLine = viewportHeight * .35;
+      const startLine = viewportHeight * .85;
 
-      entries.forEach(({ letters, trigger }) => {
-        const rect = trigger.getBoundingClientRect();
-        const travel = Math.max(1, rect.height + startLine - endLine);
+      entries.forEach(({ element, letters }) => {
+        const rect = element.getBoundingClientRect();
+        const endLine = (viewportHeight - rect.height) / 2;
+        const travel = Math.max(1, startLine - endLine);
         const progress = Math.min(1, Math.max(0, (startLine - rect.top) / travel));
         const fadeWindow = .08;
         const revealLead = .08;
