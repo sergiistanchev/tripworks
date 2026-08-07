@@ -100,7 +100,7 @@ function initProgressiveTextReveal() {
         .tw-progress-letter {
           display:inline-block;
           opacity:calc(.3 + (var(--tw-progress, 0) * .7));
-          transform:translate3d(calc((1 - var(--tw-progress, 0)) * .2em), 0, 0);
+          transform:translate3d(calc((1 - var(--tw-progress, 0)) * .1em), 0, 0);
         }
         @media (prefers-reduced-motion: reduce) {
           .tw-progress-letter { opacity:1; transform:none; }
@@ -165,11 +165,12 @@ function initProgressiveTextReveal() {
         const travel = Math.max(1, rect.height + startLine - endLine);
         const progress = Math.min(1, Math.max(0, (startLine - rect.top) / travel));
         const fadeWindow = .08;
+        const revealLead = .08;
         const lastIndex = Math.max(1, letters.length - 1);
 
         letters.forEach((letter, index) => {
           const position = index / lastIndex;
-          const localProgress = Math.min(1, Math.max(0, (progress - position) / fadeWindow));
+          const localProgress = Math.min(1, Math.max(0, (progress - position + revealLead) / fadeWindow));
           letter.style.setProperty('--tw-progress', localProgress.toFixed(3));
         });
       });
